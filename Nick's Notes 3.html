@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Notes App</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            min-height: 90vh;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+        }
+        .file-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        #export-file, #import-file-btn {
+            background-color: #4285f4;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #export-file:hover, #import-file-btn:hover {
+            background-color: #2b6fd4;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .top-controls {
+            display: flex;
+            margin-bottom: 20px;
+            gap: 10px;
+        }
+        #search {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #45a049;
+        }
+        .app-container {
+            display: flex;
+            gap: 20px;
+            height: calc(90vh - 200px);
+        }
+        .notes-list {
+            width: 30%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .note-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            position: relative;
+        }
+        .note-item:hover {
+            background-color: #f9f9f9;
+        }
+        .note-item.active {
+            background-color: #f0f7ff;
+            border-left: 3px solid #4285f4;
+        }
+        .note-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            padding-right: 20px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .note-preview {
+            color: #666;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .note-date {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        .delete-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background: none;
+            border: none;
+            color: #ff4d4d;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 0 5px;
+        }
+        .delete-btn:hover {
+            color: #ff0000;
+        }
+        .editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #note-title {
+            padding: 10px;
+            font-size: 18px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #note-content {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: none;
+        }
+        .no-notes {
+            color: #999;
+            text-align: center;
+            margin-top: 20px;
+            font-style: italic;
+        }
+        .editor-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .save-status {
+            color: #4CAF50;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .save-status.visible {
+            opacity: 1;
+        }
+        .sync-status {
+            color: #4285f4;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        #sync-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #ccc;
+        }
+        #sync-indicator.syncing {
+            background-color: #ffcc00;
+            animation: pulse 1.5s infinite;
+        }
+        #sync-indicator.synced {
+            background-color: #4CAF50;
+        }
+        #sync-indicator.error {
+            background-color: #ff4d4d;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        .user-controls {
+            margin-bottom: 15px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Notes App</h1>
+        
+        <div class="user-controls">
+            <span id="sync-status">
+                <span id="sync-indicator"></span>
+                <span id="sync-text">Offline</span>
+            </span>
+        </div>
+        
+        <div class="file-controls">
+            <button id="export-file" class="btn">Export Notes</button>
+            <div class="file-input-wrapper">
+                <button id="import-file-btn" class="btn">Import Notes</button>
+                <input type="file" id="import-file" accept=".json">
+            </div>
+        </div>
+        
+        <div class="top-controls">
+            <input type="text" id="search" placeholder="Search notes...">
+            <button id="new-note" class="btn btn-primary">New Note</button>
+        </div>
+        
+        <div class="app-container">
+            <div class="notes-list" id="notes-list">
+                <!-- Notes will be displayed here -->
+                <div class="no-notes" id="no-notes">No notes found</div>
+            </div>
+            
+            <div class="editor">
+                <input type="text" id="note-title" placeholder="Note title">
+                <textarea id="note-content" placeholder="Note content..."></textarea>
+                <div class="editor-footer">
+                    <span id="save-status" class="save-status"></span>
+                    <button id="save-note" class="btn btn-primary">New Note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        // REPLACE WITH YOUR OWN CONFIG VALUES
+        const firebaseConfig = {
+            apiKey: "AIzaSyC55IWIDc4tvvITj-q5PqAP0NicU-0d-Jc",
+            authDomain: "nick-s-notes.firebaseapp.com",
+            projectId: "nick-s-notes",
+            storageBucket: "nick-s-notes.firebasestorage.app",
+            messagingSenderId: "101330219417",
+            appId: "1:101330219417:web:baf4c0c7c3facbba87d000",
+            measurementId: "G-F6DHF5FXPP"
+            };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const notesCollection = db.collection('notes');
+        
+        // DOM elements
+        const notesList = document.getElementById('notes-list');
+        const noNotes = document.getElementById('no-notes');
+        const searchInput = document.getElementById('search');
+        const newNoteBtn = document.getElementById('new-note');
+        const saveNoteBtn = document.getElementById('save-note');
+        const noteTitleInput = document.getElementById('note-title');
+        const noteContentInput = document.getElementById('note-content');
+        const exportFileBtn = document.getElementById('export-file');
+        const importFileInput = document.getElementById('import-file');
+        const saveStatus = document.getElementById('save-status');
+        const syncIndicator = document.getElementById('sync-indicator');
+        const syncText = document.getElementById('sync-text');
+        
+        // Notes data
+        let notes = [];
+        let currentNoteId = null;
+        let autoSaveTimeout = null;
+        let isOnline = navigator.onLine;
+        
+        // Listen for online/offline events
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        
+        function updateOnlineStatus() {
+            isOnline = navigator.onLine;
+            if (isOnline) {
+                syncIndicator.classList.remove('error');
+                syncIndicator.classList.add('synced');
+                syncText.textContent = 'Online - Synced';
+                syncWithFirebase();
+            } else {
+                syncIndicator.classList.remove('synced', 'syncing');
+                syncIndicator.classList.add('error');
+                syncText.textContent = 'Offline';
+            }
+        }
+        
+        // Initial status update
+        updateOnlineStatus();
+        
+        // Load notes from Firestore
+        function loadNotesFromFirebase() {
+            updateSyncStatus('syncing', 'Syncing...');
+            
+            notesCollection.orderBy('timestamp', 'desc').get()
+                .then((querySnapshot) => {
+                    notes = [];
+                    querySnapshot.forEach((doc) => {
+                        notes.push({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    });
+                    
+                    // Also save to localStorage as backup
+                    localStorage.setItem('notes', JSON.stringify(notes));
+                    
+                    renderNotesList();
+                    updateSyncStatus('synced', 'Online - Synced');
+                })
+                .catch((error) => {
+                    console.error("Error loading notes from Firebase: ", error);
+                    loadNotesFromLocalStorage();
+                    updateSyncStatus('error', 'Sync Error');
+                });
+        }
+        
+        // Load notes from localStorage (fallback)
+        function loadNotesFromLocalStorage() {
+            const storedNotes = localStorage.getItem('notes');
+            if (storedNotes) {
+                notes = JSON.parse(storedNotes);
+                renderNotesList();
+            }
+        }
+        
+        // Sync with Firebase
+        function syncWithFirebase() {
+            if (!isOnline) {
+                return;
+            }
+            
+            loadNotesFromFirebase();
+        }
+        
+        // Update sync status indicator
+        function updateSyncStatus(status, message) {
+            syncIndicator.className = '';
+            syncIndicator.classList.add(status);
+            syncText.textContent = message;
+        }
+        
+        // Initial load
+        if (isOnline) {
+            loadNotesFromFirebase();
+        } else {
+            loadNotesFromLocalStorage();
+        }
+        
+        // Event listeners
+        newNoteBtn.addEventListener('click', createNewNote);
+        saveNoteBtn.addEventListener('click', saveAndCreateNewNote); // Changed to save current note
+        searchInput.addEventListener('input', renderNotesList);
+        exportFileBtn.addEventListener('click', exportNotes);
+        importFileInput.addEventListener('change', importNotes);
+        
+        // Auto-save when typing in title or content
+        noteTitleInput.addEventListener('input', autoSave);
+        noteContentInput.addEventListener('input', autoSave);
+        
+        // Split the functionality into two distinct functions
+        function saveAndCreateNewNote() {
+            // Save current note if it exists
+            if (saveCurrentNote()) {
+                // Only create a new empty note if explicitly requested
+                currentNoteId = null;
+                noteTitleInput.value = '';
+                noteContentInput.value = '';
+                noteTitleInput.focus();
+                updateActiveNote();
+            }
+        }
+        
+        function saveCurrentNote() {
+            const title = noteTitleInput.value.trim();
+            const content = noteContentInput.value.trim();
+            
+            if (!title && !content) return false;
+            
+            const noteData = {
+                title: title || 'Untitled',
+                content,
+                timestamp: Date.now()
+            };
+            
+            if (currentNoteId) {
+                // Update existing note
+                updateNote(currentNoteId, noteData);
+            } else {
+                // Create new note
+                addNote(noteData);
+                // Get the ID of the newly created note and set it as current
+                const newNote = notes[0]; // Assuming new notes are added at the beginning
+                currentNoteId = newNote.id;
+                updateActiveNote();
+            }
+            
+            return true;
+        }
+        
+        // Add a new note to Firestore
+        function addNote(noteData) {
+            if (isOnline) {
+                updateSyncStatus('syncing', 'Saving...');
+                
+                notesCollection.add(noteData)
+                    .then((docRef) => {
+                        const newNote = {
+                            id: docRef.id,
+                            ...noteData
+                        };
+                        
+                        notes.unshift(newNote);
+                        localStorage.setItem('notes', JSON.stringify(notes));
+                        renderNotesList();
+                        
+                        updateSyncStatus('synced', 'Online - Synced');
+                        showSavedMessage();
+                    })
+                    .catch((error) => {
+                        console.error("Error adding note: ", error);
+                        addNoteLocally(noteData);
+                        updateSyncStatus('error', 'Save Error');
+                    });
+            } else {
+                addNoteLocally(noteData);
+            }
+        }
+        
+        // Add note to local storage only
+        function addNoteLocally(noteData) {
+            const newNote = {
+                id: 'local_' + Date.now(),
+                ...noteData,
+                pendingSync: true
+            };
+            
+            notes.unshift(newNote);
+            localStorage.setItem('notes', JSON.stringify(notes));
+            renderNotesList();
+            showSavedMessage();
+        }
+        
+        // Update existing note in Firestore
+        function updateNote(noteId, noteData) {
+            // Check if it's a local-only note
+            if (noteId.startsWith('local_')) {
+                updateNoteLocally(noteId, noteData);
+                return;
+            }
+            
+            if (isOnline) {
+                updateSyncStatus('syncing', 'Saving...');
+                
+                notesCollection.doc(noteId).update(noteData)
+                    .then(() => {
+                        const index = notes.findIndex(note => note.id === noteId);
+                        if (index !== -1) {
+                            notes[index] = { ...notes[index], ...noteData };
+                            localStorage.setItem('notes', JSON.stringify(notes));
+                            renderNotesList();
+                        }
+                        
+                        updateSyncStatus('synced', 'Online - Synced');
+                        showSavedMessage();
+                    })
+                    .catch((error) => {
+                        console.error("Error updating note: ", error);
+                        updateNoteLocally(noteId, noteData);
+                        updateSyncStatus('error', 'Save Error');
+                    });
+            } else {
+                updateNoteLocally(noteId, noteData);
+            }
+        }
+        
+        // Update note in localStorage only
+        function updateNoteLocally(noteId, noteData) {
+            const index = notes.findIndex(note => note.id === noteId);
+            if (index !== -1) {
+                notes[index] = { 
+                    ...notes[index], 
+                    ...noteData,
+                    pendingSync: true 
+                };
+                localStorage.setItem('notes', JSON.stringify(notes));
+                renderNotesList();
+                showSavedMessage();
+            }
+        }
+        
+        // Delete note from Firestore
+        function deleteNote(id, event) {
+            event.stopPropagation();
+            if (!confirm('Are you sure you want to delete this note?')) return;
+            
+            // Check if it's a local-only note
+            if (id.startsWith('local_')) {
+                deleteNoteLocally(id);
+                return;
+            }
+            
+            if (isOnline) {
+                updateSyncStatus('syncing', 'Deleting...');
+                
+                notesCollection.doc(id).delete()
+                    .then(() => {
+                        notes = notes.filter(note => note.id !== id);
+                        localStorage.setItem('notes', JSON.stringify(notes));
+                        
+                        if (currentNoteId === id) {
+                            currentNoteId = null;
+                            noteTitleInput.value = '';
+                            noteContentInput.value = '';
+                        }
+                        
+                        renderNotesList();
+                        updateSyncStatus('synced', 'Online - Synced');
+                    })
+                    .catch((error) => {
+                        console.error("Error deleting note: ", error);
+                        deleteNoteLocally(id);
+                        updateSyncStatus('error', 'Delete Error');
+                    });
+            } else {
+                deleteNoteLocally(id);
+            }
+        }
+        
+        // Delete note from localStorage only
+        function deleteNoteLocally(id) {
+            notes = notes.filter(note => note.id !== id);
+            localStorage.setItem('notes', JSON.stringify(notes));
+            
+            if (currentNoteId === id) {
+                currentNoteId = null;
+                noteTitleInput.value = '';
+                noteContentInput.value = '';
+            }
+            
+            renderNotesList();
+        }
+        
+        function editNote(id) {
+            const note = notes.find(note => note.id === id);
+            if (note) {
+                // Save current note first if needed
+                if (currentNoteId && currentNoteId !== id) {
+                    saveCurrentNote();
+                }
+                
+                currentNoteId = note.id;
+                noteTitleInput.value = note.title;
+                noteContentInput.value = note.content;
+                updateActiveNote();
+            }
+        }
+        
+        // Auto-save function with debounce
+        // Auto-save function with debounce
+        function autoSave() {
+            // Only auto-save if we have a current note selected
+            if (!currentNoteId) return;
+            
+            clearTimeout(autoSaveTimeout);
+            
+            autoSaveTimeout = setTimeout(() => {
+                const title = noteTitleInput.value.trim();
+                const content = noteContentInput.value.trim();
+                
+                // Don't save empty notes
+                if (!title && !content) return;
+                
+                const noteData = {
+                    title: title || 'Untitled',
+                    content,
+                    timestamp: Date.now()
+                };
+                
+                // This uses the correct updateNote function that handles Firebase or local storage
+                updateNote(currentNoteId, noteData);
+                
+            }, 500); // 500ms delay after typing stops
+        }
+        
+        function showSavedMessage() {
+            saveStatus.textContent = "Saved";
+            saveStatus.classList.add("visible");
+            
+            setTimeout(() => {
+                saveStatus.classList.remove("visible");
+            }, 1500);
+        }
+        
+        function renderNotesList() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const filteredNotes = notes.filter(note => 
+                note.title.toLowerCase().includes(searchTerm) || 
+                note.content.toLowerCase().includes(searchTerm)
+            );
+            
+            // Clear the entire list except for the noNotes element
+            Array.from(notesList.children).forEach(child => {
+                if (child !== noNotes) {
+                    notesList.removeChild(child);
+                }
+            });
+            
+            // Show/hide "No notes" message
+            noNotes.style.display = filteredNotes.length === 0 ? 'block' : 'none';
+            
+            // Render filtered notes
+            filteredNotes.forEach(note => {
+                const noteEl = document.createElement('div');
+                noteEl.className = `note-item ${note.id === currentNoteId ? 'active' : ''}`;
+                noteEl.dataset.id = note.id;
+                
+                noteEl.innerHTML = `
+                    <div class="note-title">${note.title}</div>
+                    <div class="note-preview">${note.content.substring(0, 50)}${note.content.length > 50 ? '...' : ''}</div>
+                    <div class="note-date">${new Date(note.timestamp).toLocaleDateString()}</div>
+                    <button class="delete-btn">&times;</button>
+                `;
+                
+                // Add pending sync indicator if needed
+                if (note.pendingSync) {
+                    const pendingIndicator = document.createElement('span');
+                    pendingIndicator.style.color = '#ffcc00';
+                    pendingIndicator.style.marginLeft = '5px';
+                    pendingIndicator.innerHTML = '&#8635;'; // sync icon
+                    noteEl.querySelector('.note-title').appendChild(pendingIndicator);
+                }
+                
+                // Add event listeners
+                noteEl.addEventListener('click', () => editNote(note.id));
+                const deleteBtn = noteEl.querySelector('.delete-btn');
+                deleteBtn.addEventListener('click', (e) => deleteNote(note.id, e));
+                
+                notesList.appendChild(noteEl);
+            });
+        }
+        
+        function updateActiveNote() {
+            document.querySelectorAll('.note-item').forEach(el => {
+                el.classList.remove('active');
+                if (el.dataset.id === currentNoteId) {
+                    el.classList.add('active');
+                }
+            });
+        }
+        
+        // Export notes to a file
+        function exportNotes() {
+            const dataStr = JSON.stringify(notes);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = 'notes-export.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+        
+        // Import notes from a file
+        function importNotes(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                alert('No file selected');
+                return;
+            }
+            
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    // Handle potential BOM character in the file
+                    let content = e.target.result;
+                    if (content.charCodeAt(0) === 0xFEFF) {
+                        content = content.slice(1);
+                    }
+                    
+                    const importedNotes = JSON.parse(content);
+                    
+                    if (Array.isArray(importedNotes)) {
+                        if (confirm('This will replace your current notes. Continue?')) {
+                            // Upload to Firebase if online
+                            if (isOnline) {
+                                uploadImportedNotesToFirebase(importedNotes);
+                            } else {
+                                // Just update locally if offline
+                                notes = importedNotes;
+                                localStorage.setItem('notes', JSON.stringify(notes));
+                                renderNotesList();
+                                alert('Notes imported successfully! ' + importedNotes.length + ' notes loaded.');
+                            }
+                        }
+                    } else {
+                        alert('Invalid file format! The file does not contain a valid notes array.');
+                    }
+                } catch (error) {
+                    alert('Error reading file: ' + error.message + '\n\nTry exporting again and make sure the file is not modified.');
+                    console.error('Import error:', error);
+                }
+            };
+            
+            reader.onerror = function() {
+                alert('Failed to read file! Please try again.');
+                console.error('FileReader error');
+            };
+            
+            reader.readAsText(file);
+            
+            // Reset the input to allow selecting the same file again
+            event.target.value = '';
+        }
+        
+        // Upload imported notes to Firebase
+        function uploadImportedNotesToFirebase(importedNotes) {
+            updateSyncStatus('syncing', 'Importing...');
+            
+            // This is a batch operation
+            const batch = db.batch();
+            
+            // Get existing notes to delete them
+            notesCollection.get().then((querySnapshot) => {
+                // Mark all existing notes for deletion
+                querySnapshot.forEach((doc) => {
+                    batch.delete(notesCollection.doc(doc.id));
+                });
+                
+                // Add all imported notes
+                importedNotes.forEach((note) => {
+                    // Generate a new ID if using a local ID or preserve Firestore ID
+                    const docRef = note.id && !note.id.startsWith('local_') 
+                        ? notesCollection.doc(note.id)
+                        : notesCollection.doc();
+                    
+                    // Remove any pending sync flags or old IDs
+                    const cleanNote = {
+                        title: note.title,
+                        content: note.content,
+                        timestamp: note.timestamp
+                    };
+                    
+                    batch.set(docRef, cleanNote);
+                });
+                
+                // Commit the batch
+                return batch.commit();
+            })
+            .then(() => {
+                // Reload from Firebase to get the fresh data
+                loadNotesFromFirebase();
+                alert('Notes imported and synced successfully!');
+                updateSyncStatus('synced', 'Online - Synced');
+            })
+            .catch((error) => {
+                console.error("Error importing notes: ", error);
+                
+                // Fallback to local import
+                notes = importedNotes;
+                localStorage.setItem('notes', JSON.stringify(notes));
+                renderNotesList();
+                
+                alert('Error syncing to cloud. Notes imported locally.');
+                updateSyncStatus('error', 'Import Error');
+            });
+        }
+        
+        // Window unload event - try to save current note
+        window.addEventListener('beforeunload', () => {
+            if (currentNoteId) {
+                saveCurrentNote();
+            }
+        });
+    </script>
+</body>
+</html>
